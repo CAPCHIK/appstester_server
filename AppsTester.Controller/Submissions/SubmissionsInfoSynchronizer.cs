@@ -1,10 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AppsTester.Controller.Files;
-using AppsTester.Controller.Moodle;
+using AppsTester.Controller.Services;
 using AppsTester.Shared.RabbitMq;
 using AppsTester.Shared.SubmissionChecker.Events;
 using EasyNetQ;
@@ -20,16 +19,16 @@ namespace AppsTester.Controller.Submissions
     {
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IRabbitBusProvider _rabbitBusProvider;
-        private readonly IMoodleCommunicator _moodleCommunicator;
+        private readonly IMoodleService _moodleService;
 
         public SubmissionsInfoSynchronizer(
             IServiceScopeFactory serviceScopeFactory,
             IRabbitBusProvider rabbitBusProvider,
-            IMoodleCommunicator moodleCommunicator)
+            IMoodleService moodleService)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _rabbitBusProvider = rabbitBusProvider;
-            _moodleCommunicator = moodleCommunicator;
+            _moodleService = moodleService;
         }
         
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -38,8 +37,7 @@ namespace AppsTester.Controller.Submissions
             {
                 try
                 {
-                    var attemptAndStepIds = await _moodleCommunicator.GetFunctionResultAsync<Dictionary<int, int[]>>(
-                        functionName: "local_qtype_get_submissions_to_check", cancellationToken: stoppingToken);
+                    var attemptAndStepIds = await _moodleService.GetSubmissionsToCheckAsync(stoppingToken);
 
                     if (attemptAndStepIds == null || !attemptAndStepIds.Any())
                     {
@@ -67,37 +65,14 @@ namespace AppsTester.Controller.Submissions
 
                                 if (sc is not null && sc.SendingDateTimeUtc != lastSendingDateTime)
                                 {
-                                    await _moodleCommunicator.CallFunctionAsync(
-                                        functionName: "local_qtype_set_submission_status",
-                                        functionParams: new Dictionary<string, object>
-                                        {
-                                            ["id"] = sc.AttemptStepId
-                                        },
-                                        requestParams: new Dictionary<string, string>
-                                        {
-                                            ["status"] = sc.LastSerializedStatus
-                                        },
-                                        cancellationToken: stoppingToken);
-
-                                    await _moodleCommunicator.CallFunctionAsync(
-                                        functionName: "local_qtype_set_submission_results",
-                                        functionParams: new Dictionary<string, object>
-                                        {
-                                            ["id"] = sc.AttemptStepId
-                                        },
-                                        requestParams: new Dictionary<string, string>
-                                        {
-                                            ["result"] = sc.SerializedResult
-                                        },
-                                        cancellationToken: stoppingToken);
+                                    await _moodleService.SetSubmissionStatusAsync(sc.AttemptStepId, sc.LastSerializedStatus, stoppingToken);
+                                    await _moodleService.SetSubmissionResultAsync(sc.AttemptStepId, sc.SerializedResult,
+                                        stoppingToken);
                                 }
                                 else if (sc is null || sc.SendingDateTimeUtc == lastSendingDateTime &&
                                          sc.SerializedResult is not null)
                                 {
-                                    var submission = await _moodleCommunicator.GetFunctionResultAsync<Submission>(
-                                        functionName: "local_qtype_get_submission",
-                                        functionParams: new Dictionary<string, object> { ["id"] = attemptId },
-                                        cancellationToken: stoppingToken);
+                                    var submission = await _moodleService.GetSubmissionAsync(attemptId, stoppingToken);
 
                                     var fileCache = serviceScope.ServiceProvider.GetRequiredService<FileCache>();
 
@@ -109,15 +84,9 @@ namespace AppsTester.Controller.Submissions
 
                                     if (missingFiles.Any())
                                     {
-                                        submission = await _moodleCommunicator.GetFunctionResultAsync<Submission>(
-                                            functionName: "local_qtype_get_submission",
-                                            functionParams: new Dictionary<string, object>
-                                            {
-                                                ["id"] = attemptId,
-                                                ["included_file_hashes"] = string.Join(",",
-                                                    missingFiles.Select(mf => mf.Value))
-                                            },
-                                            cancellationToken: stoppingToken);
+                                        submission = await _moodleService.GetSubmissionAsync(attemptId, stoppingToken,
+                                            string.Join(",",
+                                                missingFiles.Select(mf => mf.Value)));
 
                                         foreach (var (fileName, fileHash) in missingFiles)
                                             fileCache.Write(fileHash,

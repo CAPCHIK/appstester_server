@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AppsTester.Controller.Moodle;
+using AppsTester.Controller.Services;
 using AppsTester.Shared.RabbitMq;
 using AppsTester.Shared.SubmissionChecker.Events;
 using EasyNetQ;
@@ -17,16 +18,16 @@ namespace AppsTester.Controller.Submissions
     {
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IRabbitBusProvider _rabbitBusProvider;
-        private readonly IMoodleCommunicator _moodleCommunicator;
+        private readonly IMoodleService _moodleService;
 
         public SubscriptionCheckResultsProcessor(
             IServiceScopeFactory serviceScopeFactory,
             IRabbitBusProvider rabbitBusProvider,
-            IMoodleCommunicator moodleCommunicator)
+            IMoodleService moodleService)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _rabbitBusProvider = rabbitBusProvider;
-            _moodleCommunicator = moodleCommunicator;
+            _moodleService = moodleService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -54,18 +55,8 @@ namespace AppsTester.Controller.Submissions
 
                             subscriptionCheck.SerializedResult = resultEvent.SerializedResult;
                             await applicationDbContext.SaveChangesAsync(stoppingToken);
-
-                            await _moodleCommunicator.CallFunctionAsync(
-                                functionName: "local_qtype_set_submission_results",
-                                functionParams: new Dictionary<string, object>
-                                {
-                                    ["id"] = subscriptionCheck.AttemptStepId
-                                },
-                                requestParams: new Dictionary<string, string>
-                                {
-                                    ["result"] = resultEvent.SerializedResult
-                                },
-                                cancellationToken: stoppingToken);
+                            await _moodleService.SetSubmissionResultAsync(subscriptionCheck.AttemptStepId,
+                                resultEvent.SerializedResult, stoppingToken);
                         }
                         catch (Exception e)
                         {

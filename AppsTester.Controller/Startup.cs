@@ -1,6 +1,7 @@
 using System;
 using AppsTester.Controller.Files;
 using AppsTester.Controller.Moodle;
+using AppsTester.Controller.Services;
 using AppsTester.Controller.Submissions;
 using AppsTester.Shared.RabbitMq;
 using Microsoft.AspNetCore.Builder;
@@ -23,7 +24,6 @@ namespace AppsTester.Controller
 
         public void ConfigureServices(IServiceCollection services)
         {
-            // add appsettings.local.json
             services.AddControllers();
 
             services.AddRabbitMq();
@@ -39,7 +39,7 @@ namespace AppsTester.Controller
             services.AddHostedService<SubscriptionCheckResultsProcessor>();
             services.AddHostedService<SubscriptionCheckStatusesProcessor>();
             services.AddHostedService<SubmissionsInfoSynchronizer>();
-
+            services.AddScoped<IMoodleService, MoodleService>();
             services.AddSignalR();
         }
 

@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AppsTester.Controller.Moodle;
+using AppsTester.Controller.Services;
 using AppsTester.Shared.RabbitMq;
 using AppsTester.Shared.SubmissionChecker.Events;
 using EasyNetQ;
@@ -18,16 +17,16 @@ namespace AppsTester.Controller.Submissions
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IRabbitBusProvider _rabbitBusProvider;
         private readonly SemaphoreSlim _semaphore = new(initialCount: 1);
-        private readonly IMoodleCommunicator _moodleCommunicator;
+        private readonly IMoodleService _moodleService;
 
         public SubscriptionCheckStatusesProcessor(
             IServiceScopeFactory serviceScopeFactory,
             IRabbitBusProvider rabbitBusProvider,
-            IMoodleCommunicator moodleCommunicator)
+            IMoodleService moodleService)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _rabbitBusProvider = rabbitBusProvider;
-            _moodleCommunicator = moodleCommunicator;
+            _moodleService = moodleService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,17 +62,8 @@ namespace AppsTester.Controller.Submissions
 
                             await applicationDbContext.SaveChangesAsync(stoppingToken);
 
-                            await _moodleCommunicator.CallFunctionAsync(
-                                functionName: "local_qtype_set_submission_status",
-                                functionParams: new Dictionary<string, object>
-                                {
-                                    ["id"] = subscriptionCheck.AttemptStepId
-                                },
-                                requestParams: new Dictionary<string, string>
-                                {
-                                    ["status"] = statusEvent.SerializedStatus
-                                },
-                                cancellationToken: stoppingToken);
+                            await _moodleService.SetSubmissionStatusAsync(subscriptionCheck.AttemptStepId,
+                                statusEvent.SerializedStatus, stoppingToken);
                         }
                         catch (Exception e)
                         {
