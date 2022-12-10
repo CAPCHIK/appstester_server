@@ -6,6 +6,8 @@ namespace AppsTester.Controller.Submissions
     {
         public Guid Id { get; set; }
 
+        public int AttemptId { get; set; }
+        
         public int AttemptStepId { get; set; }
 
         public string SerializedRequest { get; set; }
