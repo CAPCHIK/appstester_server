@@ -39,7 +39,7 @@ namespace AppsTester.Controller
             services.AddHostedService<SubscriptionCheckResultsProcessor>();
             services.AddHostedService<SubscriptionCheckStatusesProcessor>();
             services.AddHostedService<SubmissionsInfoSynchronizer>();
-            services.AddScoped<IMoodleService, MoodleService>();
+            services.AddSingleton<IMoodleService, MoodleService>();
             services.AddSignalR();
         }
 

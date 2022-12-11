@@ -1,5 +1,6 @@
 using AppsTester.Shared.RabbitMq;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AppsTester.Shared.SubmissionChecker
 {
@@ -14,7 +15,8 @@ namespace AppsTester.Shared.SubmissionChecker
                     checkerSystemName,
                     serviceProvider.GetRequiredService<IRabbitBusProvider>(),
                     serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-                    prefetch: parallelExecutions));
+                    prefetch: parallelExecutions,
+                    serviceProvider.GetRequiredService<ILogger<SubmissionCheckerBackgroundService<TSubmissionChecker>>>()));
 
             serviceCollection.AddScoped<TSubmissionChecker>();
 

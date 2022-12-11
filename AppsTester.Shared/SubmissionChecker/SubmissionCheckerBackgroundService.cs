@@ -5,7 +5,7 @@ using AppsTester.Shared.RabbitMq;
 using AppsTester.Shared.SubmissionChecker.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Sentry;
+using Microsoft.Extensions.Logging;
 
 namespace AppsTester.Shared.SubmissionChecker
 {
@@ -16,17 +16,20 @@ namespace AppsTester.Shared.SubmissionChecker
         private readonly IRabbitBusProvider _rabbitBusProvider;
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly ushort _prefetch;
+        private readonly ILogger<SubmissionCheckerBackgroundService<TSubmissionChecker>> _logger;
 
         public SubmissionCheckerBackgroundService(
             string checkerSystemName,
             IRabbitBusProvider rabbitBusProvider,
             IServiceScopeFactory serviceScopeFactory,
-            ushort prefetch)
+            ushort prefetch,
+            ILogger<SubmissionCheckerBackgroundService<TSubmissionChecker>> logger)
         {
             _checkerSystemName = checkerSystemName;
             _rabbitBusProvider = rabbitBusProvider;
             _serviceScopeFactory = serviceScopeFactory;
             _prefetch = prefetch;
+            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -65,7 +68,7 @@ namespace AppsTester.Shared.SubmissionChecker
                         }
                         catch (Exception e)
                         {
-                            SentrySdk.CaptureException(e);
+                            _logger.LogError(e, "can't handle event {SubmissionId}", request.SubmissionId);
 
                             await rabbitConnection
                                 .Scheduler

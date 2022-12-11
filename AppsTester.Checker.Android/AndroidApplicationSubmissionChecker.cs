@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -17,7 +18,6 @@ using AppsTester.Shared.Files;
 using AppsTester.Shared.SubmissionChecker;
 using ICSharpCode.SharpZipLib.Zip;
 using Microsoft.Extensions.Logging;
-using Sentry;
 using SharpAdbClient;
 using SharpAdbClient.DeviceCommands;
 
@@ -150,6 +150,7 @@ namespace AppsTester.Checker.Android
 
         protected override async Task<object> CheckSubmissionCoreAsync(SubmissionProcessingContext processingContext)
         {
+
             await _submissionStatusSetter.SetStatusAsync(new ProcessingStatus("checking_started"));
 
             using var temporaryFolder = _temporaryFolderProvider.Get();
@@ -157,35 +158,29 @@ namespace AppsTester.Checker.Android
             _logger.LogInformation("Generated temporary directory: {temporaryFolder}", temporaryFolder);
 
             await _submissionStatusSetter.SetStatusAsync(new ProcessingStatus("unzip_files"));
-
-            try
+            using (_logger.BeginScope(new Dictionary<string, string> { { "extractingFile", "submit" } }))
             {
-                await ExtractSubmitFilesAsync(temporaryFolder);
-            }
-            catch (ZipException e)
-            {
-                SentrySdk.CaptureException(e, scope =>
+                try
                 {
-                    scope.SetTag("extractingFile", "submit");
-                });
-                 
-                return new ValidationErrorResult(ValidationError: "Cannot extract submitted file.");
-            }
-            catch (InvalidDataException e)
-            {
-                SentrySdk.CaptureException(e, scope =>
+                    await ExtractSubmitFilesAsync(temporaryFolder);
+                }
+                catch (ZipException e)
                 {
-                    scope.SetTag("extractingFile", "submit");
-                });
+                    _logger.LogError(e, "Cannot extract submitted file.");
+                    return new ValidationErrorResult(ValidationError: "Cannot extract submitted file.");
+                }
+                catch (InvalidDataException e)
+                {
+                    _logger.LogError(e, "Cannot extract submitted file.");
+                    return new ValidationErrorResult(ValidationError: "Cannot extract submitted file.");
+                }
+                catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _logger.LogError(e, "can't find files for submission");
 
-                return new ValidationErrorResult(ValidationError: "Cannot extract submitted file.");
-            }
-            catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.NotFound)
-            {
-                SentrySdk.CaptureException(e);
-
-                return new ValidationErrorResult(
-                    ValidationError: "Internal check error: can't find files for submission.");
+                    return new ValidationErrorResult(
+                        ValidationError: "Internal check error: can't find files for submission.");
+                }
             }
 
             await ExtractTemplateFilesAsync(temporaryFolder);
@@ -224,7 +219,7 @@ namespace AppsTester.Checker.Android
                 taskName: "assembleDebugAndroidTest",
                 processingContext.CancellationToken);
             if (!assembleDebugAndroidTestResult.IsSuccessful)
-                return new CompilationErrorResult(assembleDebugAndroidTestResult );
+                return new CompilationErrorResult(assembleDebugAndroidTestResult);
 
             await _submissionStatusSetter.SetStatusAsync(new ProcessingStatus("install_application"));
 
@@ -257,7 +252,7 @@ namespace AppsTester.Checker.Android
             }
             catch (PackageInstallationException e)
             {
-                SentrySdk.CaptureException(e);
+                _logger.LogError(e, "can't uninstall package");
             }
 
             packageManager.InstallPackage(applicationApkFile, reinstall: false);
@@ -271,7 +266,7 @@ namespace AppsTester.Checker.Android
             }
             catch (PackageInstallationException e)
             {
-                SentrySdk.CaptureException(e);
+                _logger.LogError(e, "can't uninstall package");
             }
 
             packageManager.InstallPackage(testingApkFile, reinstall: false);

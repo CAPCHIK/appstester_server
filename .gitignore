@@ -390,3 +390,4 @@ fabric.properties
 # End of https://www.toptal.com/developers/gitignore/api/macos,rider,dotnetcore,aspnetcore
 /AppsTester.Checker.Android/appsettings.Local.json
 /AppsTester.Controller/appsettings.Local.json
+/dev-data

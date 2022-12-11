@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AppsTester.Controller.Moodle;
 using AppsTester.Controller.Services;
 using AppsTester.Shared.RabbitMq;
 using AppsTester.Shared.SubmissionChecker.Events;
@@ -10,7 +8,7 @@ using EasyNetQ;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Sentry;
+using Microsoft.Extensions.Logging;
 
 namespace AppsTester.Controller.Submissions
 {
@@ -19,15 +17,18 @@ namespace AppsTester.Controller.Submissions
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IRabbitBusProvider _rabbitBusProvider;
         private readonly IMoodleService _moodleService;
+        private readonly ILogger<SubscriptionCheckResultsProcessor> _logger;
 
         public SubscriptionCheckResultsProcessor(
             IServiceScopeFactory serviceScopeFactory,
             IRabbitBusProvider rabbitBusProvider,
-            IMoodleService moodleService)
+            IMoodleService moodleService,
+            ILogger<SubscriptionCheckResultsProcessor> logger)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _rabbitBusProvider = rabbitBusProvider;
             _moodleService = moodleService;
+            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -36,9 +37,7 @@ namespace AppsTester.Controller.Submissions
 
             await rabbitConnection
                 .PubSub
-                .SubscribeAsync<SubmissionCheckResultEvent>(
-                    subscriptionId: "",
-                    onMessage: async resultEvent =>
+                .SubscribeAsync<SubmissionCheckResultEvent>(subscriptionId: "", onMessage: async resultEvent =>
                     {
                         try
                         {
@@ -60,13 +59,13 @@ namespace AppsTester.Controller.Submissions
                         }
                         catch (Exception e)
                         {
-                            SentrySdk.CaptureException(e);
+                            _logger.LogError(e, "can't handle submissionresult {SubmissionId}", resultEvent.SubmissionId);
 
                             await rabbitConnection
                                 .Scheduler
                                 .FuturePublishAsync(resultEvent, TimeSpan.FromMinutes(1), stoppingToken);
                         }
-                    });
+                    }, cancellationToken: stoppingToken);
         }
     }
 }

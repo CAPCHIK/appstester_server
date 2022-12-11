@@ -1,15 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AppsTester.Shared.SubmissionChecker;
-using Medallion.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Mono.Unix;
-using Sentry;
 
 namespace AppsTester.Checker.Android.Gradle
 {
@@ -51,6 +50,7 @@ namespace AppsTester.Checker.Android.Gradle
         public async Task<GradleTaskExecutionResult> ExecuteTaskAsync(
             string tempDirectory, string taskName, CancellationToken cancellationToken)
        {
+            using var _ = _logger.BeginScope(new Dictionary<string, string> { { "taskName", taskName } });
             var submissionsMutex = _submissionProcessingContextAccessor.ProcessingContext.SubmissionsMutex;
 
             await submissionsMutex.WaitAsync(cancellationToken);
@@ -117,10 +117,7 @@ namespace AppsTester.Checker.Android.Gradle
             }
             catch (Exception exception)
             {
-                SentrySdk.CaptureException(exception, scope =>
-                {
-                    scope.SetTag("taskName", taskName);
-                });
+                _logger.LogError(exception, "can't check execution rights");
             }
         }
     }

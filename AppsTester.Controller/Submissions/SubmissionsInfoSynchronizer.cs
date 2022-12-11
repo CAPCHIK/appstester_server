@@ -10,8 +10,8 @@ using EasyNetQ;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Sentry;
 
 namespace AppsTester.Controller.Submissions
 {
@@ -20,15 +20,18 @@ namespace AppsTester.Controller.Submissions
         private readonly IServiceScopeFactory _serviceScopeFactory;
         private readonly IRabbitBusProvider _rabbitBusProvider;
         private readonly IMoodleService _moodleService;
+        private readonly ILogger<SubmissionsInfoSynchronizer> _logger;
 
         public SubmissionsInfoSynchronizer(
             IServiceScopeFactory serviceScopeFactory,
             IRabbitBusProvider rabbitBusProvider,
-            IMoodleService moodleService)
+            IMoodleService moodleService,
+            ILogger<SubmissionsInfoSynchronizer> logger)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _rabbitBusProvider = rabbitBusProvider;
             _moodleService = moodleService;
+            _logger = logger;
         }
         
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -122,7 +125,7 @@ namespace AppsTester.Controller.Submissions
                             }
                             catch (Exception e)
                             {
-                                SentrySdk.CaptureException(e);
+                                _logger.LogError(e, "can't handle attempt step {attemptStepId}", attemptStepId);
                             }
                             finally
                             {
@@ -133,7 +136,7 @@ namespace AppsTester.Controller.Submissions
                 }
                 catch (Exception e)
                 {
-                    SentrySdk.CaptureException(e);
+                    _logger.LogError(e, "uonhandled global exception");
                 }
                 finally
                 {
